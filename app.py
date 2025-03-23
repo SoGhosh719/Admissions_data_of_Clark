@@ -4,7 +4,7 @@ import pandas as pd
 # Load data
 @st.cache_data
 def load_data():
-    return pd.read_csv("Clark_Admissions_Master_FULL.csv")
+    return pd.read_csv("Admissions Data of Clark.csv")
 
 df = load_data()
 
