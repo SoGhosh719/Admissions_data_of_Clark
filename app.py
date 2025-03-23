@@ -16,10 +16,10 @@ def load_data():
 
 df = load_data()
 
-# Convert rows to text
+# Convert rows to text for embedding
 docs = df.apply(lambda row: f"{row['Category']} - {row['Subcategory']} | {row['Label']}: {row['Value']} | {row['Details']}", axis=1).tolist()
 
-# Embedding model
+# Load sentence-transformer embedding model
 @st.cache_resource
 def load_embedder():
     return SentenceTransformer("all-MiniLM-L6-v2")
@@ -27,19 +27,19 @@ def load_embedder():
 embedder = load_embedder()
 doc_embeddings = embedder.encode(docs, convert_to_tensor=False)
 
-# FAISS index
+# Create FAISS index
 dimension = doc_embeddings[0].shape[0]
 index = faiss.IndexFlatL2(dimension)
 index.add(np.array(doc_embeddings))
 
-# Generation model
+# Load Hugging Face text generation model
 @st.cache_resource
 def load_generator():
     return pipeline("text-generation", model="tiiuae/falcon-7b-instruct", max_new_tokens=150)
 
 generator = load_generator()
 
-# UI
+# Streamlit UI
 st.title("🎓 Clark GenAI Admissions Assistant")
 st.markdown("Ask anything about applying to Clark University — I'll try my best to help!")
 
@@ -48,13 +48,15 @@ user_input = st.chat_input("E.g. When is the regular decision deadline?")
 if user_input:
     st.chat_message("user").write(user_input)
 
-    # Embed question
+    # Embed and search
     question_vec = embedder.encode([user_input])
     _, top_k = index.search(np.array(question_vec), k=3)
     context = "\n".join([docs[i] for i in top_k[0]])
 
-    # Prompt the model
+    # Prompt creation
     prompt = f"Answer the question based on the following context:\n\n{context}\n\nQuestion: {user_input}\nAnswer:"
+
+    # Try generating response
     try:
         with st.spinner("Let me think..."):
             result = generator(prompt)[0]['generated_text']
@@ -64,6 +66,4 @@ if user_input:
         st.warning("⚠️ The model couldn't generate a response. Here's the top relevant info I found:")
         for i in top_k[0]:
             row = df.iloc[i]
-            st.markdown(f"**{row['Label']}** — {row['Value']}  
-            _{row['Details']}_")
-
+            st.markdown(f"**{row['Label']}** — {row['Value']}  \n*{row['Details']}*")
