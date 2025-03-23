@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 
+# ✅ Set page config FIRST
+st.set_page_config(page_title="Clark Admissions Assistant", layout="wide")
+
 # Load data
 @st.cache_data
 def load_data():
@@ -8,8 +11,7 @@ def load_data():
 
 df = load_data()
 
-# App title
-st.set_page_config(page_title="Clark Admissions Assistant", layout="wide")
+# App content
 st.title("🎓 Clark University Admissions Assistant")
 st.markdown("Easily explore all the important undergraduate admissions information you need!")
 
@@ -36,4 +38,3 @@ st.dataframe(filtered[["Category", "Subcategory", "Label", "Value", "Audience", 
 if st.checkbox("Show Source URLs"):
     for idx, row in filtered.iterrows():
         st.markdown(f"🔗 [{row['Label']}]({row['Source URL']})")
-
