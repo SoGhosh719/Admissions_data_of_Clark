@@ -1,40 +1,69 @@
 import streamlit as st
 import pandas as pd
+from sentence_transformers import SentenceTransformer
+from transformers import pipeline
+import faiss
+import numpy as np
 
-# ✅ Set page config FIRST
-st.set_page_config(page_title="Clark Admissions Assistant", layout="wide")
+st.set_page_config(page_title="Clark GenAI Admissions Assistant", layout="wide")
 
-# Load data
+# Load CSV data
 @st.cache_data
 def load_data():
-    return pd.read_csv("Admissions Data of Clark.csv")
+    df = pd.read_csv("Admissions Data of Clark.csv")
+    df.fillna("", inplace=True)
+    return df
 
 df = load_data()
 
-# App content
-st.title("🎓 Clark University Admissions Assistant")
-st.markdown("Easily explore all the important undergraduate admissions information you need!")
+# Convert rows to text
+docs = df.apply(lambda row: f"{row['Category']} - {row['Subcategory']} | {row['Label']}: {row['Value']} | {row['Details']}", axis=1).tolist()
 
-# Sidebar filters
-st.sidebar.header("🔍 Filter Options")
-supercat = st.sidebar.selectbox("Supercategory", ["All"] + sorted(df['Supercategory'].dropna().unique()))
-category = st.sidebar.selectbox("Category", ["All"] + sorted(df['Category'].dropna().unique()))
-audience = st.sidebar.selectbox("Audience", ["All"] + sorted(df['Audience'].dropna().unique()))
+# Embedding model
+@st.cache_resource
+def load_embedder():
+    return SentenceTransformer("all-MiniLM-L6-v2")
 
-# Filter logic
-filtered = df.copy()
-if supercat != "All":
-    filtered = filtered[filtered['Supercategory'] == supercat]
-if category != "All":
-    filtered = filtered[filtered['Category'] == category]
-if audience != "All":
-    filtered = filtered[filtered['Audience'] == audience]
+embedder = load_embedder()
+doc_embeddings = embedder.encode(docs, convert_to_tensor=False)
 
-# Display results
-st.markdown("### 📋 Filtered Results")
-st.dataframe(filtered[["Category", "Subcategory", "Label", "Value", "Audience", "Required", "Details"]], use_container_width=True)
+# FAISS index
+dimension = doc_embeddings[0].shape[0]
+index = faiss.IndexFlatL2(dimension)
+index.add(np.array(doc_embeddings))
 
-# Show source links
-if st.checkbox("Show Source URLs"):
-    for idx, row in filtered.iterrows():
-        st.markdown(f"🔗 [{row['Label']}]({row['Source URL']})")
+# Generation model
+@st.cache_resource
+def load_generator():
+    return pipeline("text-generation", model="tiiuae/falcon-7b-instruct", max_new_tokens=150)
+
+generator = load_generator()
+
+# UI
+st.title("🎓 Clark GenAI Admissions Assistant")
+st.markdown("Ask anything about applying to Clark University — I'll try my best to help!")
+
+user_input = st.chat_input("E.g. When is the regular decision deadline?")
+
+if user_input:
+    st.chat_message("user").write(user_input)
+
+    # Embed question
+    question_vec = embedder.encode([user_input])
+    _, top_k = index.search(np.array(question_vec), k=3)
+    context = "\n".join([docs[i] for i in top_k[0]])
+
+    # Prompt the model
+    prompt = f"Answer the question based on the following context:\n\n{context}\n\nQuestion: {user_input}\nAnswer:"
+    try:
+        with st.spinner("Let me think..."):
+            result = generator(prompt)[0]['generated_text']
+            response = result.split("Answer:")[-1].strip()
+            st.chat_message("assistant").write(response)
+    except:
+        st.warning("⚠️ The model couldn't generate a response. Here's the top relevant info I found:")
+        for i in top_k[0]:
+            row = df.iloc[i]
+            st.markdown(f"**{row['Label']}** — {row['Value']}  
+            _{row['Details']}_")
+
