@@ -1,6 +1,7 @@
 streamlit
-pandas
 sentence-transformers
-faiss-cpu
 transformers
-torch
+faiss-cpu
+numpy
+pandas
+requests
