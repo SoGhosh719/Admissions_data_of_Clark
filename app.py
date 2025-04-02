@@ -32,10 +32,10 @@ dimension = doc_embeddings[0].shape[0]
 index = faiss.IndexFlatL2(dimension)
 index.add(np.array(doc_embeddings))
 
-# Load Hugging Face text generation model
+# Load lightweight Hugging Face text generation model
 @st.cache_resource
 def load_generator():
-    return pipeline("text-generation", model="tiiuae/falcon-7b-instruct", max_new_tokens=150)
+    return pipeline("text-generation", model="distilgpt2", max_new_tokens=150)
 
 generator = load_generator()
 
@@ -62,8 +62,9 @@ if user_input:
             result = generator(prompt)[0]['generated_text']
             response = result.split("Answer:")[-1].strip()
             st.chat_message("assistant").write(response)
-    except:
-        st.warning("⚠️ The model couldn't generate a response. Here's the top relevant info I found:")
+    except Exception as e:
+        st.error(f"⚠️ Error generating response: {e}")
+        st.info("Here’s the most relevant info I found:")
         for i in top_k[0]:
             row = df.iloc[i]
             st.markdown(f"**{row['Label']}** — {row['Value']}  \n*{row['Details']}*")
